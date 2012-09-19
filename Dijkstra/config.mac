@@ -1,0 +1,20 @@
+# Stefano Gualandi, stefano.gualandi at gmail.com
+# last update, September, 2012
+
+OPTFLAG  = -O2 -Wall -DNDEBUG
+LDFLAGS 	= -O2 -DNDEBUG -lm
+
+COMPILER    = g++ ${OPTFLAG}
+LINKER      = g++ ${LDFLAGS}
+
+# Directory for the Boost library
+BOOST_INCLUDE   = /Users/stegua/Programming/boost/include
+BOOST_LIB       = /Users/stegua/Programming/boost/lib 
+
+# Lemon graph library
+LEMON_INCLUDE   = /Users/stegua/Programming/lemon/include
+LEMON_LIB       = /Users/stegua/Programming/lemon/lib/libemon.a
+
+# Or-Tools graph library
+ORTOOLS_INCLUDE   = /Users/stegua/Programming/SRC/or-tools-read-only/src
+ORTOOLS_LIB       = /Users/stegua/Programming/SRC/or-tools-read-only/lib
