@@ -15,6 +15,7 @@ These files are:
 9. **results.py** is a python script to elaborate the logs files in simple text tables
 10. **logs** is a directory with the details of my runs that I used to write the blog entry
 11. **small.dat** a micro graph to test the everything work as it should
+12. **dimacs2plain.py** and **plain2dimacs.py** two micro script to convert file from plain format to dimacs, and viceversa.
 
 The graph text files are available as a unique .tar.gz file of 333MB [at this link](http://www-dimat.unipv.it/~gualandi/resources/graphs-blog.tar.gz).
 
