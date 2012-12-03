@@ -1,0 +1,37 @@
+option presolve 0;
+option solver cplexamp;
+option cplex_options "time=300 threads=1 mipdisplay=3";
+#option cplex_options "mipemphasis=1 mipcuts=-1 dualopt time=3600 threads=1 mipdisplay=3";
+
+# Load the initial assignment
+let {p in P} x[x0[p],p] := 1;
+
+# Uncomment this line to give as input the best solution
+#let {p in P} x[x1[p],p] := 1;
+
+# Try to reduce the set of possible assignment
+param card_mp default card(MP);
+display card_mp;
+let MP := {i in M, p in P: (forall {j in R} (Q[p,j] <= C[i,j])) and (forall {j in TR: x0[p]!=i} (Q[p,j] <= RC[i,j]))};
+repeat {
+   let card_mp := card(MP);
+   let PF := {p in P: card({(i,p) in MP}) == 1};
+   let Fixed := {(i,p) in MP: p in PF};
+   let MP := {i in M, p in P: ((i,p) not in Fixed) and (forall {j in R} (Q[p,j] <= C[i,j]-sum{(i,q) in Fixed} Q[q,j])) and (forall {j in TR: x0[p]!=i} (Q[p,j] <= RC[i,j] - sum{(i,q) in Fixed: x0[q]!=i} Q[q,j]))} union Fixed;
+
+   display card_mp;
+} until (card(MP) == card_mp);
+
+printf "%d %d %d %d %d\n",card({p in P: card({(i,p) in MP}) == 3}),  card({p in P: card({(i,p) in MP}) == 2}), card(Fixed), card(MP), card(M)*card(P);
+
+fix {(i,p) in Fixed} x[i,p] := 1;
+
+solve;
+
+# Print the final assignment
+for {p in P} {
+  for {(i,p) in MP: x[i,p] >= 0.98} {
+     printf "%d ", i-1;
+  }
+}
+printf "\n";
