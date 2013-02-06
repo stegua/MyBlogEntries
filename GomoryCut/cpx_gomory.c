@@ -312,25 +312,27 @@ int cg_solver(int m, MyRow* rows)
          POST_CMD( CPXbinvarow(env, model, i, z) );
          rmatbeg[cut] = idx;
          for ( j = 0; j < n1; ++j ) {
-            z[j] = floor(z[j]);
-            if ( z[j] >= 0 )
-               printf("+");
-            printf("%.1f x%d ", z[j], j+1);
+            z[j] = floor(z[j]); /// DANGER!
             if ( z[j] != 0 ) {
                rmatind[idx] = j;
                rmatval[idx] = z[j];
                idx++;
             }
+            /// Print the cut
+            if ( z[j] >= 0 )
+               printf("+");
+            printf("%.1f x%d ", z[j], j+1);
          }
-         gc_rhs[cut] = floor(b_bar[i]);
+         gc_rhs[cut] = floor(b_bar[i]); /// DANGER!
          gc_sense[cut] = 'L';
          printf("<= %.1f\n", gc_rhs[cut]);
          cut++;
       }
 
    /// Add the new cuts
-   POST_CMD( CPXaddrows (env, model, 0, n_cuts, idx, 
-            gc_rhs, gc_sense, rmatbeg, rmatind, rmatval, 
+   POST_CMD( CPXaddrows (env, model, 0, 
+            n_cuts, idx, gc_rhs, gc_sense, 
+            rmatbeg, rmatind, rmatval, 
             NULL, NULL) );
 
    /// Solve the new LP
