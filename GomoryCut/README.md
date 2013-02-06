@@ -3,7 +3,7 @@ This directory contains a simple program (`cpx_gomory.c`) that takes as input a 
 
 Given a problem with _n_ variables and _m_ constraints, the problem is:
 
-	min { cx | Ax <= b, x>=0, x integer }
+	min { cx | Ax <= b, x >= 0, x integer }
 
 The input file format is as follows:
 
@@ -16,7 +16,7 @@ The input file format is as follows:
 Since the program is just written for teaching purpose, it supports at most 10 constraints.
 
 ### Example
-The file `example.mat` encodes a problem taken from Wolsey's book *Integer Programming*, Wiley, 1998.
+The file `example.mat` encodes Exercise 8.10 in Wolsey's book *Integer Programming*, Wiley, 1998.
 
 To solve the problem, first you need compile the program, and then execute it as:
 
@@ -60,3 +60,6 @@ The output should be as follows:
 	x3 = 7.00  Basic
 	x4 = 3.00  Basic
 	x5 = 1.00  Basic
+	
+## Requirements
+You need to have the [GUROBI](http://www.gurobi.com) installed on your computer.
