@@ -62,4 +62,4 @@ The output should be as follows:
 	x5 = 1.00  Basic
 	
 ## Requirements
-You need to have [GUROBI](http://www.gurobi.com) installed on your computer.
+You need to have [CPLEX](http://www-01.ibm.com/software/integration/optimization/cplex-optimizer/) installed on your computer.
