@@ -13,6 +13,7 @@ In order to compile the file type (you need to specify **your path** for CBack):
 
 and then, if you execute the program you should get the following output:
 
+```
    $ ./basic-maxclique
    Graph: 
    0 -> 8 7 
@@ -26,5 +27,6 @@ and then, if you execute the program you should get the following output:
    8 -> 
    w(G)=4.
    Clique:  0  2  5  6
+```
 
 Have fun!
