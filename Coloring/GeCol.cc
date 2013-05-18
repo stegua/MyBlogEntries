@@ -28,6 +28,8 @@ extern "C" {
 using namespace Gecode;
 using namespace Gecode::Int;
 
+int MYMETHOD = 0;
+
 /// Cutoff object for the script
 class MyCutoff : public Search::Stop {
    private:
@@ -95,17 +97,24 @@ class GraphColoring : public Script {
          }
 
          /// Post constraints on edges
-         for ( int i = 0; i < n; ++i )
-            for ( int j = i+1; j < n ; ++j )
-               if ( GRAPH_IS_EDGE(g,i,j) )
-                     rel ( *this, x[i], IRT_NQ, x[j] );
+         //for ( int i = 0; i < n; ++i )
+           // for ( int j = i+1; j < n ; ++j )
+             //  if ( GRAPH_IS_EDGE(g,i,j) )
+               //      rel ( *this, x[i], IRT_NQ, x[j] );
          /// Symmetry breaking
          Symmetries syms;
          syms << ValueSymmetry(IntArgs::create(k,1));
-         //MySymBranch<Int::IntView>::post ( *this, x, g );
-         //branch(*this, x, INT_VAR_AFC_SIZE_MAX(), INT_VAL_MIN(), syms);
-         //branch(*this, x, INT_VAR_ACTIVITY_SIZE_MAX(), INT_VAL_MIN());
-         branch(*this, x, INT_VAR_DEGREE_SIZE_MIN(), INT_VAL_MIN(),syms);
+         Rnd r(13U);
+         if ( MYMETHOD == 0 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 1 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MIN(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 2 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_DEGREE_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 3 ) 
+            branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 4 ) 
+            branch(*this, x, INT_VAR_RND(r), INT_VAL_MIN(), syms);
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
@@ -178,8 +187,10 @@ colorHeuristic ( const graph_t*    g,
       }
 
       so.stop = MyCutoff::create( elapsed, memory );
-
-      DFS<GraphColoring> e(s, so);
+      Search::Cutoff* c = Search::Cutoff::geometric(1,2);
+      //Search::Cutoff* c = Search::Cutoff::constant(10000);
+      so.cutoff = c;
+      RBS<DFS,GraphColoring> e(s, so);
       int scriptMemory = e.statistics().memory;
 
       GraphColoring* ex = e.next();
@@ -200,13 +211,13 @@ colorHeuristic ( const graph_t*    g,
          break;
       }
       UB = std::min(UB,ex->getChi());
-      fprintf(stdout,"\tNew upper bound: %d - Memory used by current model: %d - Nodes visit by current model: %ld\n",
-            UB, scriptMemory, e.statistics().node);
+      fprintf(stdout,"\t%.2f\t%d\t%d\t%ld\n",
+            t.stop()/1000, UB, scriptMemory, e.statistics().node);
 
       delete ex;
    } while ( time - t.stop() >= 0.001 );
 
-   fprintf(stdout, "Number of nodes = %d - Time %.3f", tot_nodes, t.stop());
+   fprintf(stdout, "Nodes %d  Time %.1f", tot_nodes, t.stop()/1000);
 
    return UB;
 }
@@ -218,10 +229,15 @@ colorHeuristic ( const graph_t*    g,
 /// MAIN PROGRAM
 int main(int argc, char **argv)
 {
-   if ( argc != 2 ) {
+   if ( argc == 1 ) {
       fprintf(stdout, "\nusage:  $ ./GeCol <filename>\n\n");
       exit(EXIT_SUCCESS);
    }
+
+   if ( argc == 3 )
+      MYMETHOD = atoi(argv[2]);
+   else
+      MYMETHOD = 0;
 
    int  timeout = 300*1000;  /// 5 minutes timeout
    int  memoryLimit = numeric_limits<int>::max();
@@ -230,6 +246,7 @@ int main(int argc, char **argv)
    
    clique_options* opts;
    graph_t* g;  
+   graph_t* h;  
    set_t s;
    set_t  C = NULL;
    int    n_c = 0;   /// Number of maximal cliques found
@@ -238,6 +255,7 @@ int main(int argc, char **argv)
    int LB = 0;
    int UB;
    int n;
+   int m;
 
    /// Set the options for using Cliquer
    opts = (clique_options*) malloc (sizeof(clique_options));
@@ -252,45 +270,85 @@ int main(int argc, char **argv)
 
    /// Read a graph instance in any DIMACS format (binary or ascii)
    g = graph_read_dimacs_file(argv[1]);
+   h = graph_read_dimacs_file(argv[1]);
    n = g->n;
+   m = graph_edge_count(g);
    UB = n;
    
    /// Allocate space to store maximal cliques
-   Cs = (set_t*)malloc(n*sizeof(set_t));
+   Cs = (set_t*)malloc(m*sizeof(set_t));
    C  = set_new(n);
 
-   /// Use Cliquer implementation of greedy coloring heuristic
-   table = reorder_by_greedy_coloring(g,FALSE);
-   { /// Copmute the number of colors used
-      int k = 0;
-      for ( int i = 0; i < n; ++i )
-         k = std::max(k,table[i]);
-      UB = std::min(UB,k);
-   }
+   /// Loop until at least a vertex is removed
+   bool flag = true;
+   int  n_r = 0;
+   while ( graph_edge_count(h) > 0 ) {
+      flag = false;
+      /// Use Cliquer implementation of greedy coloring heuristic
+      if ( n_c == 0 )
+         table = reorder_by_greedy_coloring(g,FALSE);
+      else
+         table = reorder_by_random(g,FALSE);
+      { /// Compute the number of colors used
+         int k = 0;
+         for ( int i = 0; i < n; ++i )
+            k = std::max(k,table[i]);
+         UB = std::min(UB,k);
+      }
 
-   /// Find a maximal clique for every vertex, and store the largest
-   for ( int i = 0; i < n; ++i ) 
-      if ( graph_vertex_degree(g,i) > 3 ) {
-         g->weights[i] = n;
-         s = clique_find_single ( g, 3, 0, TRUE, opts);
-         if ( s != NULL ) {
-            if ( set_size(s) > LB ) {
-               LB = set_size(s);
-               set_copy(s,C);  /// C is the best maximal clique found
-            } 
-            Cs[n_c++]=set_duplicate(s);
+      /// Find a maximal clique for every vertex, and store the largest
+      for ( int i = 0; i < n; ++i ) 
+         if ( graph_vertex_degree(h,i) > 0 ) {
+            g->weights[i] = 1;
+            s = clique_find_single ( h, 2, 0, TRUE, opts);
+            if ( s != NULL ) {
+               if ( set_size(s) > LB ) {
+                  LB = set_size(s);
+                  set_copy(s,C);  /// C is the best maximal clique found
+               } 
+               Cs[n_c++]=set_duplicate(s);
+               /// Rimuovi tutti gli archi contenuti nella clique
+               for ( int j = 0; j < n; ++j )
+                  if ( SET_CONTAINS_FAST(s,j) )
+                     for ( int l = j+1; l < n; ++l )
+                        if ( SET_CONTAINS_FAST(s,l) && GRAPH_IS_EDGE(h,j,l) )
+                           GRAPH_DEL_EDGE(h,j,l);
+            }
+            g->weights[i] = 1;
          }
-         g->weights[i] = 1;
-      }
 
-   /// Reduce the graph (if degree smaller than LB, then remove the vertex)
-   for ( int i = 0; i < n; ++i ) {
-      if ( graph_vertex_degree(g, i) > 0 && graph_vertex_degree(g, i) < LB ) { 
-         for ( int j = 0; j < n && i != j; ++j )
-            if ( GRAPH_IS_EDGE(g,i,j) )
-               GRAPH_DEL_EDGE(g,i,j);
+      /// Reduce the graph (if degree smaller than LB, then remove the vertex)
+      for ( int i = 0; i < n; ++i ) {
+         if ( graph_vertex_degree(g, i) > 0 && graph_vertex_degree(g, i) < LB ) { 
+            for ( int j = 0; j < n && i != j; ++j )
+               if ( GRAPH_IS_EDGE(g,i,j) ) {
+                  GRAPH_DEL_EDGE(g,i,j);
+                  if ( GRAPH_IS_EDGE(h,i,j) )
+                     GRAPH_DEL_EDGE(h,i,j);
+                  flag = true;
+                  n_r++;
+               }
+         }
       }
    }
+   fprintf(stdout,"Preprocessing: edge removal %d cliques %d\n", n_r, n_c);
+
+   /// Remove duplicate cliques
+   int n_d = n_c;
+   for ( int i = 0; i < n_c-1 ; i++ ) {
+      for ( int j = i+1; j < n_c ; j++ ) {
+         if ( set_size(Cs[i]) == set_size(Cs[j]) ) {
+            set_t res = set_new(n);
+            set_intersection(res, Cs[i], Cs[j]);
+            if ( set_size(Cs[i]) == set_size(res) ) {
+               Cs[i] = set_new(n);
+               n_d--;
+            }
+         }
+      }
+   }
+
+   fprintf(stdout, "Edges %d - Useful maximal cliques %d\n", m, n_d);
 
    /// Find a heuristic set of cliques used to post 
    /// the alldifferent constraints in the CP model

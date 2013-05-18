@@ -1,11 +1,11 @@
 # Stefano Gualandi, stefano.gualandi@gmail.com
 # last update, May, 2013
 
-OPTFLAG = -O2 -DDEBUG -Wall -g -fPIC
-LDFLAGS = -O2 -DDEBUG -lm -lpthread -g
+OPTFLAG = -O2 -DDEBUG -Wall -ggdb -fPIC
+LDFLAGS = -O2 -DDEBUG -lm -lpthread -ggdb
 
-COMPILER    = clang++ ${OPTFLAG}
-LINKER      = clang++ ${LDFLAGS}
+COMPILER    = g++ ${OPTFLAG}
+LINKER      = g++ ${LDFLAGS}
 
 # Directory for my files
 MYHOME          = ${PWD}
@@ -15,16 +15,14 @@ LIB             = ${MYHOME}
 SRC             = ${MYHOME}
 
 # Gecode directory
-GECODE_INCLUDE  = /Users/gualandi/LIBS/gecode/include
-GECODE_LIB      = -L/Users/gualandi/LIBS/gecode/lib \
+GECODE_INCLUDE  = /data/gualandi/LIBS/gecode-trunk/
+GECODE_LIB      = -L/data/gualandi/LIBS/gecode-trunk/ \
    -lgecodedriver -lgecodeint -lgecodekernel -lgecodeminimodel \
-   -lgecodesearch -lgecodeset -lgecodesupport 
+   -lgecodesearch -lgecodeset -lgecodesupport -lgecodefloat
 
 # Cliquer
-CLIQUER_INC = /Users/gualandi/MyLIB/cliquer-1.21/
-CLIQUER_LIB = /Users/gualandi/MyLIB/cliquer-1.21/cliquer.o \
-   /Users/gualandi/MyLIB/cliquer-1.21/graph.o \
-   /Users/gualandi/MyLIB/cliquer-1.21/reorder.o
+CLIQUER_INC = /data/gualandi/LIBS/cliquer-1.21
+CLIQUER_LIB = ${CLIQUER_INC}/cliquer.o ${CLIQUER_INC}/graph.o ${CLIQUER_INC}/reorder.o
 
 # My Files
 GeCol: ${SRC}/GeCol.cc
