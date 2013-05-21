@@ -114,6 +114,10 @@ class GraphColoring : public Script {
          if ( MYMETHOD == 3 ) 
             branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
          if ( MYMETHOD == 4 ) 
+            branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN());
+         if ( MYMETHOD == 5 ) 
+            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 6 ) 
             branch(*this, x, INT_VAR_RND(r), INT_VAL_MIN(), syms);
       }
 
@@ -188,7 +192,7 @@ colorHeuristic ( const graph_t*    g,
 
       so.stop = MyCutoff::create( elapsed, memory );
       Search::Cutoff* c = Search::Cutoff::geometric(1,2);
-      //Search::Cutoff* c = Search::Cutoff::constant(10000);
+      //Search::Cutoff* c = Search::Cutoff::constant(100000);
       so.cutoff = c;
       RBS<DFS,GraphColoring> e(s, so);
       int scriptMemory = e.statistics().memory;
@@ -246,6 +250,7 @@ int main(int argc, char **argv)
    
    clique_options* opts;
    graph_t* g;  
+   graph_t* g1;  
    graph_t* h;  
    set_t s;
    set_t  C = NULL;
@@ -269,12 +274,23 @@ int main(int argc, char **argv)
 
 
    /// Read a graph instance in any DIMACS format (binary or ascii)
-   g = graph_read_dimacs_file(argv[1]);
-   h = graph_read_dimacs_file(argv[1]);
-   n = g->n;
-   m = graph_edge_count(g);
+   g1 = graph_read_dimacs_file(argv[1]);
+   table = reorder_by_degree(g1,FALSE);
+
+   n = g1->n;
+   m = graph_edge_count(g1);
    UB = n;
    
+   /// Reorder the graph
+   g = graph_new(n);
+   h = graph_new(n);
+   for ( int i = 0; i < n-1; ++i ) 
+      for ( int j = i+1; j < n ; ++j )
+         if ( GRAPH_IS_EDGE(g1,table[i],table[j]) ) {
+            GRAPH_ADD_EDGE(g,i,j);
+            GRAPH_ADD_EDGE(h,i,j);
+         }
+
    /// Allocate space to store maximal cliques
    Cs = (set_t*)malloc(m*sizeof(set_t));
    C  = set_new(n);
@@ -301,6 +317,7 @@ int main(int argc, char **argv)
          if ( graph_vertex_degree(h,i) > 0 ) {
             g->weights[i] = 1;
             s = clique_find_single ( h, 2, 0, TRUE, opts);
+            maximalize_clique(s,g);
             if ( s != NULL ) {
                if ( set_size(s) > LB ) {
                   LB = set_size(s);
