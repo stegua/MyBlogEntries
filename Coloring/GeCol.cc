@@ -118,7 +118,7 @@ class GraphColoring : public Script {
          if ( MYMETHOD == 5 ) 
             branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
          if ( MYMETHOD == 6 ) 
-            branch(*this, x, INT_VAR_RND(r), INT_VAL_MIN(), syms);
+            branch(*this, x, tiebreak(INT_VAR_MIN_MIN(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
@@ -191,7 +191,7 @@ colorHeuristic ( const graph_t*    g,
       }
 
       so.stop = MyCutoff::create( elapsed, memory );
-      Search::Cutoff* c = Search::Cutoff::geometric(1,2);
+      Search::Cutoff* c = Search::Cutoff::geometric(1,1.7);
       //Search::Cutoff* c = Search::Cutoff::constant(100000);
       so.cutoff = c;
       RBS<DFS,GraphColoring> e(s, so);

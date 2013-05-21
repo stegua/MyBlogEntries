@@ -15,13 +15,13 @@ LIB             = ${MYHOME}
 SRC             = ${MYHOME}
 
 # Gecode directory
-GECODE_INCLUDE  = /data/gualandi/LIBS/gecode-trunk/
-GECODE_LIB      = -L/data/gualandi/LIBS/gecode-trunk/ \
+GECODE_INCLUDE  = /Users/gualandi/MyLIB/gecode-trunk
+GECODE_LIB      = -L/Users/gualandi/MyLIB/gecode-trunk/ \
    -lgecodedriver -lgecodeint -lgecodekernel -lgecodeminimodel \
    -lgecodesearch -lgecodeset -lgecodesupport -lgecodefloat
 
 # Cliquer
-CLIQUER_INC = /data/gualandi/LIBS/cliquer-1.21
+CLIQUER_INC = /Users/gualandi/MyLIB/cliquer-1.21
 CLIQUER_LIB = ${CLIQUER_INC}/cliquer.o ${CLIQUER_INC}/graph.o ${CLIQUER_INC}/reorder.o
 
 # My Files
