@@ -93,7 +93,10 @@ class GraphColoring : public Script {
                   idx++;
                }
 
-            distinct ( *this, xdiff, ICL_DOM );       
+            //if ( g->n >= 1000 ) 
+              // distinct ( *this, xdiff, ICL_BND );       
+            //else
+               distinct ( *this, xdiff, ICL_DOM );       
          }
 
          /// Post constraints on edges
@@ -104,21 +107,26 @@ class GraphColoring : public Script {
          /// Symmetry breaking
          Symmetries syms;
          syms << ValueSymmetry(IntArgs::create(k,1));
-         Rnd r(13U);
+         Rnd r(13U+k);
          if ( MYMETHOD == 0 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN());
          if ( MYMETHOD == 1 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MIN(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 2 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_DEGREE_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 3 ) 
-            branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 4 ) 
-            branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(),INT_VAR_RND(r)), INT_VAL_MIN());
-         if ( MYMETHOD == 5 ) 
             branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 2 ) 
+            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_DEGREE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 3 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 4 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 5 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_DEGREE_MAX(),
+                     INT_VAR_RND(r)), INT_VAL_MIN(), syms);
          if ( MYMETHOD == 6 ) 
-            branch(*this, x, tiebreak(INT_VAR_MIN_MIN(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 7 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 8 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_DEGREE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
@@ -192,7 +200,6 @@ colorHeuristic ( const graph_t*    g,
 
       so.stop = MyCutoff::create( elapsed, memory );
       Search::Cutoff* c = Search::Cutoff::geometric(1,1.7);
-      //Search::Cutoff* c = Search::Cutoff::constant(100000);
       so.cutoff = c;
       RBS<DFS,GraphColoring> e(s, so);
       int scriptMemory = e.statistics().memory;
@@ -221,7 +228,7 @@ colorHeuristic ( const graph_t*    g,
       delete ex;
    } while ( time - t.stop() >= 0.001 );
 
-   fprintf(stdout, "Nodes %d  Time %.1f", tot_nodes, t.stop()/1000);
+   fprintf(stdout, "Nodes %d  Time %.2f", tot_nodes, t.stop()/1000);
 
    return UB;
 }
@@ -291,6 +298,7 @@ int main(int argc, char **argv)
             GRAPH_ADD_EDGE(h,i,j);
          }
 
+   float density = (float)n*(n-1)/2;
    /// Allocate space to store maximal cliques
    Cs = (set_t*)malloc(m*sizeof(set_t));
    C  = set_new(n);
@@ -316,7 +324,10 @@ int main(int argc, char **argv)
       for ( int i = 0; i < n; ++i ) 
          if ( graph_vertex_degree(h,i) > 0 ) {
             g->weights[i] = 1;
-            s = clique_find_single ( h, 2, 0, TRUE, opts);
+            if ( n > 1000 || density > 0.7 )
+               s = clique_find_single ( h, 2, 0, TRUE, opts);
+            else
+               s = clique_find_single ( h, 0, 0, TRUE, opts);
             maximalize_clique(s,g);
             if ( s != NULL ) {
                if ( set_size(s) > LB ) {
@@ -372,7 +383,7 @@ int main(int argc, char **argv)
    //Cliques cliques = heuristic_cliques ( g, n_tries );    
 
    /// Call the CP model 
-   fprintf(stdout, "Run CP model ...\n");
+   fprintf(stdout, "Run CP model with LB %d ...\n", LB);
    int Xg = colorHeuristic ( g, &C, n_c, Cs, UB, timeout, memoryLimit, threads, saveMemory );
    fprintf(stdout, "\nX(G) = %d\n", Xg);
 
