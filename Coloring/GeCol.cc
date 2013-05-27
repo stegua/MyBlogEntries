@@ -96,7 +96,7 @@ class GraphColoring : public Script {
             //if ( g->n >= 1000 ) 
               // distinct ( *this, xdiff, ICL_BND );       
             //else
-               distinct ( *this, xdiff, ICL_DOM );       
+               distinct ( *this, xdiff, ICL_BND );       
          }
 
          /// Post constraints on edges
@@ -107,7 +107,7 @@ class GraphColoring : public Script {
          /// Symmetry breaking
          Symmetries syms;
          syms << ValueSymmetry(IntArgs::create(k,1));
-         Rnd r(13U+k);
+         Rnd r(13U*k);
          if ( MYMETHOD == 0 ) 
             branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN());
          if ( MYMETHOD == 1 ) 
@@ -127,6 +127,16 @@ class GraphColoring : public Script {
             branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
          if ( MYMETHOD == 8 ) 
             branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_DEGREE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 9 ) 
+            branch(*this, x, tiebreak(INT_VAR_ACTIVITY_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 10 ) 
+            branch(*this, x, tiebreak(INT_VAR_ACTIVITY_SIZE_MAX(), INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 11 ) 
+            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_AFC_SIZE_MAX(), INT_VAR_ACTIVITY_SIZE_MAX(),
+                     INT_VAR_DEGREE_MAX()), INT_VAL_MIN(), syms);
+         if ( MYMETHOD == 12 ) 
+            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_DEGREE_MAX(), INT_VAR_AFC_SIZE_MAX(),
+                     INT_VAR_ACTIVITY_SIZE_MAX()), INT_VAL_MIN(), syms);
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
