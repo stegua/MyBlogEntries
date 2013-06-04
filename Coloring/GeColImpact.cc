@@ -29,7 +29,6 @@ using namespace Gecode;
 using namespace Gecode::Int;
 
 int MYMETHOD = 0;
-float SCALE = 17;
 
 /// Cutoff object for the script
 class MyCutoff : public Search::Stop {
@@ -95,34 +94,15 @@ class GraphColoring : public Script {
                }
 
             //if ( g->n >= 1000 ) 
-              // distinct ( *this, xdiff, ICL_DND );       
+              // distinct ( *this, xdiff, ICL_BND );       
             //else
-               distinct ( *this, xdiff, ICL_BND );       
+               distinct ( *this, xdiff, ICL_DOM );       
          }
-
-         /// Post constraints on edges
-         //for ( int i = 0; i < n; ++i )
-           // for ( int j = i+1; j < n ; ++j )
-             //  if ( GRAPH_IS_EDGE(g,i,j) )
-               //      rel ( *this, x[i], IRT_NQ, x[j] );
-         /// Symmetry breaking
-         Symmetries syms;
-         syms << ValueSymmetry(IntArgs::create(k,1));
-         Rnd r(13U*k);
-         if ( MYMETHOD == 0 ) 
-            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN());
-         if ( MYMETHOD == 1 ) 
-            branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 2 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 3 ) 
-            branch(*this, x, tiebreak(INT_VAR_ACTIVITY_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 4 ) 
-            branch(*this, x, tiebreak(INT_VAR_ACTIVITY_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 5 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 6 ) 
-            branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
+         status();
+         int d_t = 0;
+         for ( int i = 0; i < n; ++i )
+            d_t += x[i].size();
+         printf("U %d\t", d_t);
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
@@ -182,9 +162,8 @@ colorHeuristic ( const graph_t*    g,
    Search::Options so;
    so.threads = n_threads;
    so.clone   = false;
-      int status = 1;
 
-   do {
+   //do {
       UB--; /// Find a coloring of better cost
 
       GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, saveMemory );
@@ -192,54 +171,29 @@ colorHeuristic ( const graph_t*    g,
 
       if ( elapsed <= 0.001 ) {
          fprintf(stdout,"\ttimeout of CP solver elapsed\n");
-         status = 0;
-         break;
       }
 
       so.stop = MyCutoff::create( elapsed, memory );
-      //Search::Cutoff* c = Search::Cutoff::luby(1000);
-      float ss = SCALE/10;
-      Search::Cutoff* c = Search::Cutoff::geometric(1000,ss);
+      Search::Cutoff* c = Search::Cutoff::geometric(1,1.7);
       so.cutoff = c;
       RBS<DFS,GraphColoring> e(s, so);
       int scriptMemory = e.statistics().memory;
 
       GraphColoring* ex = e.next();
-
-
       if ( e.stopped() ) {
          fprintf(stdout,"\tWARNING: STOPPED, IT IS ONLY AN UPPER BOUND!\n");
 
          MyCutoff* myc = dynamic_cast<MyCutoff *>(so.stop);
-         if ( myc->stopTime(e.statistics(),so) ) {
+         if ( myc->stopTime(e.statistics(),so) )
             fprintf(stdout," TIME LIMIT!\n");
-            status = 0;
-         }
-         if ( myc->stopMemory(e.statistics(),so) ) {
+         if ( myc->stopMemory(e.statistics(),so) )
             fprintf(stdout," MEMORY LIMIT!\n");
-            status = 2;
-         }
       }
 
       tot_nodes += e.statistics().node;
 
-      if ( ex == NULL ) {
-         UB++;
-         break;
-      }
-      UB = std::min(UB,ex->getChi());
-      double tend = t.stop()/1000;
-      fprintf(stdout,"\t%.2f\t%d\t%d\t%ld\n", tend, UB, scriptMemory, e.statistics().node);
-
       delete ex;
-   } while ( time - t.stop() >= 0.001 );
-   double tend = t.stop()/1000;
-   if ( tend > 299.5 ) {
-      tend = 300.0;
-      status = 0;
-   }
 
-   fprintf(stdout, "Nodes %d  Time %.2f status %d ", tot_nodes, tend, status);
 
    return UB;
 }
@@ -256,13 +210,10 @@ int main(int argc, char **argv)
       exit(EXIT_SUCCESS);
    }
 
-   if ( argc >= 3 )
+   if ( argc == 3 )
       MYMETHOD = atoi(argv[2]);
    else
       MYMETHOD = 0;
-
-   if ( argc == 4 )
-      SCALE = atoi(argv[3]);
 
    int  timeout = 300*1000;  /// 5 minutes timeout
    int  memoryLimit = numeric_limits<int>::max();
@@ -317,9 +268,14 @@ int main(int argc, char **argv)
    Cs = (set_t*)malloc(m*sizeof(set_t));
    C  = set_new(n);
 
-   Support::Timer t;
-   t.start();
-   
+   for ( int i = 0; i < n; ++i ) {
+//      g->weights[i] = graph_vertex_degree(g,i);
+      s = clique_find_single ( g, 0, 0, TRUE, opts);
+      if ( s != NULL ) {
+         LB = set_size(s);
+         set_copy(s,C);  /// C is the best maximal clique found
+      } 
+   }
    /// Loop until at least a vertex is removed
    bool flag = true;
    int  n_r = 0;
@@ -340,6 +296,7 @@ int main(int argc, char **argv)
       /// Find a maximal clique for every vertex, and store the largest
       for ( int i = 0; i < n; ++i ) 
          if ( graph_vertex_degree(h,i) > 0 ) {
+            g->weights[i] = 1;
             if ( n > 1000 || density > 0.7 )
                s = clique_find_single ( h, 2, 0, TRUE, opts);
             else
@@ -358,6 +315,7 @@ int main(int argc, char **argv)
                         if ( SET_CONTAINS_FAST(s,l) && GRAPH_IS_EDGE(h,j,l) )
                            GRAPH_DEL_EDGE(h,j,l);
             }
+            g->weights[i] = 1;
          }
 
       /// Reduce the graph (if degree smaller than LB, then remove the vertex)
@@ -394,23 +352,31 @@ int main(int argc, char **argv)
    fprintf(stdout, "Edges %d - Useful maximal cliques %d\n", m, n_d);
 
    /// Stats on cliques
+   //for ( int i = 0; i < n_c; i++ )
+     // if ( set_size(Cs[i]) > 1 )
+       //  set_print(Cs[i]);
+
+   /// Call the CP model 
+   fprintf(stdout, "Run CP model with LB %d ...\n", LB);
    int mm = 0;
+   int ms = 0;
    for ( int i = 0; i < n_c; i++ )
-      if ( set_size(Cs[i]) == LB ) {
+      if ( set_size(Cs[i]) > 1 ) {
+         int Xg = colorHeuristic ( g, &Cs[i], n_c, Cs, UB, timeout, memoryLimit, threads, saveMemory );
          int dd = 0;
          for ( int j = 0; j < n; ++j )
             if ( SET_CONTAINS(Cs[i],j) )
                dd += graph_vertex_degree(g,j);
          if ( dd > mm ) {
             mm = dd;
-            set_copy(Cs[i],C);  /// C is the best maximal clique found
+            ms = set_size(Cs[i]);
          }
+         printf(" s %d d %d\n", set_size(Cs[i]), dd );
       }
-
-   /// Call the CP model 
-   fprintf(stdout, "Run CP model with LB %d - Preproc time %.3f\n", LB, t.stop()/1000);
-   int Xg = colorHeuristic ( g, &C, n_c, Cs, UB, timeout, memoryLimit, threads, saveMemory );
-   fprintf(stdout, " X(G) = %d\n", Xg);
+   printf("Finale %d %d\n", ms, mm);
+        // set_print(Cs[i]);
+   //int Xg = colorHeuristic ( g, &C, n_c, Cs, UB, timeout, memoryLimit, threads, saveMemory );
+   //fprintf(stdout, "\nX(G) = %d\n", Xg);
 
    /// Free the memory used by Cliquer
    if ( s != NULL )
