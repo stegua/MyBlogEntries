@@ -74,7 +74,7 @@ class GraphColoring : public Script {
    public:
       /// Actual model
       GraphColoring( const graph_t*  g, int k, 
-            const set_t* C, int n_c, const set_t* Cs, bool saveMemory = false ) 
+            const set_t* C, int n_c, const set_t* Cs, const vector<int>& init ) 
          :  x ( *this, g->n, 1, k )     /// Colors start from '1'                  
       {  
          int n = g->n;
@@ -83,6 +83,15 @@ class GraphColoring : public Script {
          for ( int i = 0; i < n; ++i )
             if ( SET_CONTAINS_FAST(C[0],i) )
                rel ( *this, x[i], IRT_EQ, col++);
+         if ( !init.empty() ) {
+            for ( int i = 0; i < n; ++i )
+               if ( init[i] > 0 ) 
+                  rel ( *this, x[i], IRT_EQ, init[i]);
+            for ( int i = 0; i < n-1; ++i ) 
+               for ( int j = i+1; j < n ; ++j )
+                  if ( GRAPH_IS_EDGE(g,i,j) )
+                     rel ( *this, x[i], IRT_NQ, x[j]);
+         }
 
          /// Post an 'alldifferent' constraints for each maximal cliques
          for ( int i = 0; i < n_c; ++i ) {
@@ -94,17 +103,9 @@ class GraphColoring : public Script {
                   idx++;
                }
 
-            //if ( g->n >= 1000 ) 
-              // distinct ( *this, xdiff, ICL_DND );       
-            //else
-               distinct ( *this, xdiff, ICL_BND );       
+            distinct ( *this, xdiff, ICL_DOM );       
          }
 
-         /// Post constraints on edges
-         //for ( int i = 0; i < n; ++i )
-           // for ( int j = i+1; j < n ; ++j )
-             //  if ( GRAPH_IS_EDGE(g,i,j) )
-               //      rel ( *this, x[i], IRT_NQ, x[j] );
          /// Symmetry breaking
          Symmetries syms;
          syms << ValueSymmetry(IntArgs::create(k,1));
@@ -130,48 +131,38 @@ class GraphColoring : public Script {
       }
 
       /// Perform copying during cloning
-      virtual Space*
-         copy(bool share) {
-            return new GraphColoring(share, *this);
-         }
+      virtual Space* copy(bool share) {
+         return new GraphColoring(share, *this);
+      }
 
-      virtual int
-         getChi(void) {
-            int k = 0;
-            for ( int i = x.size(); i--; )
-               k = std::max( k, x[i].val() );
-            return k;
-         }
+      virtual int getChi(void) {
+         int k = 0;
+         for ( int i = x.size(); i--; )
+            k = std::max( k, x[i].val() );
+         return k;
+      }
 
-      virtual vector< vector<int> >
-         getColors(void) {
-            vector< vector<int> > colors;
-            for ( int i = x.size(); i--; ) {
-               vector<int> color;
-               colors.push_back(color);
-            }
-            for ( int i = x.size(); i--; )
-               colors[x[i].val()].push_back( i );
-
-            return colors;
-         }
+      virtual void getColoring(vector<int>& certificate) {
+         for ( int i = 0; i < certificate.size(); ++i ) 
+            certificate[i] = x[i].val();
+      }
 };
 
 
-
 /// Find upper bounds to coloring
-int
-colorHeuristic ( const graph_t*    g, 
+vector<int>
+colorFinal ( const graph_t*    g, 
+      vector<int>&    initial,
       const set_t*    maxClique,
       int             n_c,        /// Number of cliques in "cliques"
       const set_t*    cliques,
       int             UB,
       double          time = 3600,
       int             memory = numeric_limits<int>::max(),
-      int             n_threads = 1,
-      bool            saveMemory = false
+      int             n_threads = 1
       )
 {
+   vector<int> certificate(g->n, 0);
    /// Solution of the problem
    Support::Timer t;
    t.start();
@@ -182,12 +173,82 @@ colorHeuristic ( const graph_t*    g,
    Search::Options so;
    so.threads = n_threads;
    so.clone   = false;
-      int status = 1;
+   int status = 1;
+
+   GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, initial );
+   elapsed = time - t.stop();
+
+   if ( elapsed <= 0.001 ) {
+      fprintf(stdout,"\ttimeout of CP solver elapsed\n");
+      status = 0;
+   }
+
+   so.stop = MyCutoff::create( elapsed, memory );
+   
+   DFS<GraphColoring> e(s, so);
+
+   GraphColoring* ex = e.next();
+
+   if ( e.stopped() ) {
+      fprintf(stdout,"\tWARNING: STOPPED, IT IS ONLY AN UPPER BOUND!\n");
+
+      MyCutoff* myc = dynamic_cast<MyCutoff *>(so.stop);
+      if ( myc->stopTime(e.statistics(),so) ) {
+         fprintf(stdout," TIME LIMIT!\n");
+         status = 0;
+      }
+      if ( myc->stopMemory(e.statistics(),so) ) {
+         fprintf(stdout," MEMORY LIMIT!\n");
+         status = 2;
+      }
+   }
+
+   ex->getColoring(certificate);
+   delete ex;
+   
+   double tend = t.stop()/1000;
+   if ( tend > 299.5 ) {
+      tend = 300.0;
+      status = 0;
+   }
+
+   fprintf(stdout, "FixTim %.2f status %d ", tend, status);
+
+   return certificate;
+}
+
+/// Find upper bounds to coloring
+vector<int>
+colorHeuristic ( const graph_t*    g, 
+      const set_t*    maxClique,
+      int             n_c,        /// Number of cliques in "cliques"
+      const set_t*    cliques,
+      int             UB,
+      double          time = 3600,
+      int             memory = numeric_limits<int>::max(),
+      int             n_threads = 1
+      )
+{
+   /// For storing the coloring certificate
+   vector<int> certificate(g->n, 0);
+   int status = 1;
+   vector<int> empty;
+   /// Solution of the problem
+   Support::Timer t;
+   t.start();
+
+   double elapsed;
+   int tot_nodes = 0;
+
+   Search::Options so;
+   so.threads = n_threads;
+   so.clone   = false;
+
 
    do {
       UB--; /// Find a coloring of better cost
 
-      GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, saveMemory );
+      GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, empty );
       elapsed = time - t.stop();
 
       if ( elapsed <= 0.001 ) {
@@ -228,6 +289,7 @@ colorHeuristic ( const graph_t*    g,
          break;
       }
       UB = std::min(UB,ex->getChi());
+      ex->getColoring(certificate);
       double tend = t.stop()/1000;
       fprintf(stdout,"\t%.2f\t%d\t%d\t%ld\n", tend, UB, scriptMemory, e.statistics().node);
 
@@ -240,13 +302,10 @@ colorHeuristic ( const graph_t*    g,
    }
 
    fprintf(stdout, "Nodes %d  Time %.2f status %d ", tot_nodes, tend, status);
+   fprintf(stdout, " X(G) = %d\n", UB);
 
-   return UB;
+   return certificate;
 }
-
-
-
-
 
 /// MAIN PROGRAM
 int main(int argc, char **argv)
@@ -267,12 +326,12 @@ int main(int argc, char **argv)
    int  timeout = 300*1000;  /// 5 minutes timeout
    int  memoryLimit = numeric_limits<int>::max();
    int  threads = 1;
-   bool saveMemory = false;
    
    clique_options* opts;
    graph_t* g;  
    graph_t* g1;  
    graph_t* h;  
+   graph_t* G;  
    set_t s;
    set_t  C = NULL;
    int    n_c = 0;   /// Number of maximal cliques found
@@ -305,11 +364,16 @@ int main(int argc, char **argv)
    /// Reorder the graph
    g = graph_new(n);
    h = graph_new(n);
+   G = graph_new(n);
+   vector<int> inver(n,0);
    for ( int i = 0; i < n-1; ++i ) 
       for ( int j = i+1; j < n ; ++j )
          if ( GRAPH_IS_EDGE(g1,table[i],table[j]) ) {
             GRAPH_ADD_EDGE(g,i,j);
             GRAPH_ADD_EDGE(h,i,j);
+            GRAPH_ADD_EDGE(G,i,j);
+            inver[table[i]] = i;
+            inver[table[j]] = j;
          }
 
    float density = (float)n*(n-1)/2;
@@ -348,7 +412,7 @@ int main(int argc, char **argv)
             if ( s != NULL ) {
                if ( set_size(s) > LB ) {
                   LB = set_size(s);
-                  set_copy(s,C);  /// C is the best maximal clique found
+                  set_copy(C,s);  /// C is the best maximal clique found
                } 
                Cs[n_c++]=set_duplicate(s);
                /// Rimuovi tutti gli archi contenuti nella clique
@@ -362,8 +426,8 @@ int main(int argc, char **argv)
 
       /// Reduce the graph (if degree smaller than LB, then remove the vertex)
       for ( int i = 0; i < n; ++i ) {
-         if ( graph_vertex_degree(g, i) > 0 && graph_vertex_degree(g, i) < LB ) { 
-            for ( int j = 0; j < n && i != j; ++j )
+         if ( graph_vertex_degree(g, i) >= 0 && graph_vertex_degree(g, i) < LB ) { 
+            for ( int j = i+1; j < n ; ++j )
                if ( GRAPH_IS_EDGE(g,i,j) ) {
                   GRAPH_DEL_EDGE(g,i,j);
                   if ( GRAPH_IS_EDGE(h,i,j) )
@@ -403,15 +467,40 @@ int main(int argc, char **argv)
                dd += graph_vertex_degree(g,j);
          if ( dd > mm ) {
             mm = dd;
-            set_copy(Cs[i],C);  /// C is the best maximal clique found
+            set_copy(C, Cs[i]);  /// C is the best maximal clique found
          }
       }
 
    /// Call the CP model 
    fprintf(stdout, "Run CP model with LB %d - Preproc time %.3f\n", LB, t.stop()/1000);
-   int Xg = colorHeuristic ( g, &C, n_c, Cs, UB, timeout, memoryLimit, threads, saveMemory );
-   fprintf(stdout, " X(G) = %d\n", Xg);
+   vector<int> certificate = colorHeuristic ( g, &C, n_c, Cs, UB, timeout, memoryLimit, threads );
+   
+   for ( int i = 0; i < n-1; ++i ) 
+      for ( int j = i+1; j < n ; ++j )
+         if ( GRAPH_IS_EDGE(g,i,j) && certificate[i] == certificate[j] ) {
+            printf("ERROR: No feasible coloring!\n");
+            exit(-1);
+         }
+   
+   /// Costruct the final coloring
+   for ( int i = 0; i < n; ++i )
+      if ( graph_vertex_degree(g,i) < LB )
+         certificate[i] = 0;
 
+   vector<int> sol = colorFinal ( G, certificate, &C, n_c, Cs, UB, timeout, memoryLimit, threads );
+
+   for ( int i = 0; i < n-1; ++i ) 
+      for ( int j = i+1; j < n ; ++j )
+         if ( GRAPH_IS_EDGE(g1,i,j) && sol[inver[i]] == sol[inver[j]] ) {
+            printf("ERROR: No feasible coloring!\n");
+            exit(-1);
+         }
+
+   /// Print the coloring certificate
+   printf("\ncertificate: ");
+   for ( int i = 0; i < n; ++i ) 
+      printf("%d ", sol[inver[i]]);
+   printf("\n");
    /// Free the memory used by Cliquer
    if ( s != NULL )
       set_free(s);
