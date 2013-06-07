@@ -50,7 +50,7 @@ For more information on this code, see Anuj Mehrotra and Michael A. Trick,
 #include "reorder.h"
 
 #define MAX_RAND (2.0*(1 << 30))
-#define MAX_NODE 2000 // original: 600
+#define MAX_NODE 10000 // original: 600
 //#define TRUE 1
 //#define FALSE 0
 #define INF 100000.0

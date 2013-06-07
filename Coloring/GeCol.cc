@@ -28,9 +28,10 @@ extern "C" {
 using namespace Gecode;
 using namespace Gecode::Int;
 
-int MYMETHOD = 0;
-float SCALE = 17;
-set_t    C = NULL;
+int    BRANCH   = 0;
+double SCALE    = 17;
+int    PROP     = 1;
+set_t  C        = NULL;
 
 
 /// Cutoff object for the script
@@ -82,7 +83,7 @@ class GraphColoring : public Script {
    public:
       /// Actual model
       GraphColoring( const graph_t*  g, int k, 
-            const set_t* CC, int n_c, const set_t* Cs, const vector<int>& init ) 
+            int n_c, const set_t* Cs, const vector<int>& init ) 
          :  x ( *this, g->n, 0, k-1 )     /// Colors start from '1'                  
       { 
          int n = g->n;
@@ -97,44 +98,53 @@ class GraphColoring : public Script {
                      rel ( *this, x[i], IRT_NQ, x[j]);
          }
 
+
          /// Post an 'alldifferent' constraints for each maximal cliques
          for ( int i = 0; i < n_c; ++i )
-            if ( set_size(Cs[i]) > 0 ) {
+            if ( set_size(Cs[i]) > 1 ) {
                IntVarArgs xdiff( set_size(Cs[i]) );
                int idx = 0;
                for ( int j = 0; j < n; ++j ) 
-                  if ( SET_CONTAINS_FAST(Cs[i],j) ) {
-                     xdiff[idx] = x[j];
-                     idx++;
-                  }
-
-               distinct ( *this, xdiff, ICL_DOM );       
+                  if ( SET_CONTAINS_FAST(Cs[i],j) )
+                     xdiff[idx++] = x[j];
+               if ( PROP == 0 )
+                  distinct ( *this, xdiff, ICL_BND );
+               if ( PROP == 1 )
+                  distinct ( *this, xdiff, ICL_DOM );       
             } 
-   
-         /*for ( int i = 0; i < n-1; ++i ) 
-            for ( int j = i+1; j < n ; ++j )
-               if ( GRAPH_IS_EDGE(g,i,j) || GRAPH_IS_EDGE(g,j,i) )
-                  rel ( *this, x[i], IRT_NQ, x[j]);*/
+         if ( PROP == 2 ) {
+            for ( int i = 0; i < n-1; ++i ) 
+               for ( int j = i+1; j < n ; ++j )
+                  if ( GRAPH_IS_EDGE(g,i,j) )
+                     rel ( *this, x[i], IRT_NQ, x[j]);
+         }   
          /// Symmetry breaking
          Symmetries syms;
          syms << ValueSymmetry(IntArgs::create(k,0));
          Rnd r(13U*k);
-         if ( MYMETHOD == 0 ) 
+         if ( BRANCH == 0 ) 
             branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN());
-         if ( MYMETHOD == 1 ) 
+         if ( BRANCH == 1 ) 
             branch(*this, x, tiebreak(INT_VAR_SIZE_MIN(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 2 ) 
+         if ( BRANCH == 2 ) 
             branch(*this, x, tiebreak(INT_VAR_AFC_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 3 ) 
+         if ( BRANCH == 3 ) 
             branch(*this, x, tiebreak(INT_VAR_ACTIVITY_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 4 ) 
+         if ( BRANCH == 4 ) 
             branch(*this, x, tiebreak(INT_VAR_ACTIVITY_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 5 ) 
-            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms );
-         if ( MYMETHOD == 6 ) 
+         if ( BRANCH == 5 ) 
             branch(*this, x, tiebreak(INT_VAR_DEGREE_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms);
-         if ( MYMETHOD == 7 ) 
+         if ( BRANCH == 6 ) 
             branch(*this, x, tiebreak(INT_VAR_MERIT_MAX(&trampoline), INT_VAR_RND(r)), INT_VAL_MIN(), syms );
+         if ( BRANCH == 7 ) 
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN(), syms );
+         if ( BRANCH == 8 ) {
+            int col = 0;
+            for ( int i = 0; i < n; i++ )
+               if ( SET_CONTAINS_FAST(C, i) )
+                  rel ( *this, x[i], IRT_EQ, col++ );
+            branch(*this, x, tiebreak(INT_VAR_AFC_SIZE_MAX(), INT_VAR_RND(r)), INT_VAL_MIN() );
+         }
       }
 
       GraphColoring( bool share, GraphColoring& s) : Script(share,s) {
@@ -172,48 +182,10 @@ static double trampoline(const Space& home, IntVar x, int i) {
 
 /// Find upper bounds to coloring
 vector<int>
-colorFinal ( const graph_t*    g, 
-      vector<int>&    initial,
-      const set_t*    maxClique,
-      int             n_c,        /// Number of cliques in "cliques"
-      const set_t*    cliques,
-      int             UB,
-      double          time,
-      int             memory,
-      int             n_threads
-      )
-{
-   vector<int> certificate(g->n, 0);
-   /// Solution of the problem
-   Support::Timer t;
-   t.start();
-
-   Search::Options so;
-   so.threads = n_threads;
-   so.clone   = false;
-
-   GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, initial );
-   DFS<GraphColoring> e(s, so);
-   GraphColoring* ex = e.next();
-   if ( ex == NULL ) {
-      printf("Puta!\n");
-      exit(EXIT_FAILURE);
-   }
-   ex->getColoring(certificate);
-   delete ex;
-   
-   fprintf(stdout, "FixTim %.2f", t.stop()/1000);
-
-   return certificate;
-}
-
-/// Find upper bounds to coloring
-vector<int>
 colorHeuristic ( const graph_t*    g, 
-      const set_t*    maxClique,
       int             n_c,        /// Number of cliques in "cliques"
       const set_t*    cliques,
-      int             UB,
+      int&            UB,
       double          time,
       int             memory,
       int             n_threads
@@ -235,7 +207,7 @@ colorHeuristic ( const graph_t*    g,
    do {
       UB--; /// Find a coloring of better cost
 
-      GraphColoring* s = new GraphColoring ( g, UB, maxClique, n_c, cliques, empty );
+      GraphColoring* s = new GraphColoring ( g, UB, n_c, cliques, empty );
       elapsed = time - t.stop();
 
       if ( elapsed <= 1e-04 ) {
@@ -250,12 +222,13 @@ colorHeuristic ( const graph_t*    g,
       so.stop = MyCutoff::create( elapsed, memory );
       so.threads = n_threads;
       so.clone   = false;
-      so.cutoff = c;
+      so.cutoff  = c;
       RBS<DFS,GraphColoring> e(s, so);
 
       GraphColoring* ex = e.next();
       
       scriptMemory = std::max<int>(scriptMemory, e.statistics().memory);
+      tot_nodes += e.statistics().node;
 
       if ( e.stopped() ) {
          fprintf(stdout,"\tWARNING: STOPPED, IT IS ONLY AN UPPER BOUND!\n");
@@ -271,10 +244,7 @@ colorHeuristic ( const graph_t*    g,
          }
       }
 
-      tot_nodes += e.statistics().node;
-
       if ( ex == NULL ) {
-         printf("ex=NULL\n");
          UB++;
          break;
       }
@@ -296,39 +266,70 @@ colorHeuristic ( const graph_t*    g,
    return certificate;
 }
 
+/// Find the final certificate
+vector<int>
+colorFinal ( const graph_t*    g, 
+      vector<int>&    initial,
+      int             n_c,        /// Number of cliques in "cliques"
+      const set_t*    cliques,
+      int             UB,
+      int             n_threads
+      )
+{
+   vector<int> certificate(g->n, 0);
+   /// Solution of the problem
+   Support::Timer t;
+   t.start();
+
+   Search::Options so;
+   so.threads = n_threads;
+   so.clone   = false;
+
+   GraphColoring* s = new GraphColoring ( g, UB, n_c, cliques, initial );
+   DFS<GraphColoring> e(s, so);
+   GraphColoring* ex = e.next();
+   if ( ex == NULL ) {
+      printf("Puta!\n");
+      exit(EXIT_FAILURE);
+   }
+   ex->getColoring(certificate);
+   delete ex;
+   
+   fprintf(stdout, "FixTim %.2f", t.stop()/1000);
+
+   return certificate;
+}
+
 /// MAIN PROGRAM
 int main(int argc, char **argv)
 {
    if ( argc == 1 ) {
-      fprintf(stdout, "\nusage:  $ ./GeCol <filename>\n\n");
+      fprintf(stdout, "\nusage:  $ ./GeCol <filename> <branch> <restart>\n\n");
       exit(EXIT_SUCCESS);
    }
 
    if ( argc >= 3 )
-      MYMETHOD = atoi(argv[2]);
+      BRANCH = atoi(argv[2]);
    else
-      MYMETHOD = 0;
+      BRANCH = 0;
 
-   if ( argc == 4 )
+   if ( argc >= 4 )
       SCALE = atoi(argv[3]);
 
-   int  timeout = 3600*1000;  /// 1000 seconds timeout
+   if ( argc == 5 )
+      PROP = atoi(argv[4]);
+
+   int  timeout = 600*1000;  /// in seconds
    int  memoryLimit = numeric_limits<int>::max();
-   int  threads = 4;
+   int  threads = 1;
    
    clique_options* opts;
    graph_t* g;  
    graph_t* g0;  
    graph_t* h;  
    graph_t* G;  
-   set_t    s;
-   int      n_c = 0;   /// Number of maximal cliques found
    set_t*   Cs;        /// Collection of maximal cliques
    int*     table;
-   int LB = 0;
-   int UB;
-   int n;
-   int m;
 
    /// Set the options for using Cliquer
    opts = (clique_options*) malloc (sizeof(clique_options));
@@ -345,10 +346,13 @@ int main(int argc, char **argv)
    g0 = graph_read_dimacs_file(argv[1]);
    table = reorder_by_degree(g0,FALSE);
 
-   n = g0->n;
-   m = graph_edge_count(g0);
-   UB = n;
-   s = set_new(n);
+   int n = g0->n;
+   int m = graph_edge_count(g0);
+   int n_c = 0;   /// Number of maximal cliques found
+   int UB = n;
+   int LB = 0;
+   set_t s = set_new(n);
+   float density = (float)m/(n*(n-1)/2);
    
    /// Reorder the graph
    g = graph_new(n);
@@ -365,48 +369,69 @@ int main(int argc, char **argv)
             inver[table[j]] = j;
          }
 
-   float density = (float)n*(n-1)/2;
    /// Allocate space to store maximal cliques
    Cs = (set_t*)malloc(m*sizeof(set_t));
    C  = set_new(n);
 
    Support::Timer t;
    t.start();
-   
-   /// Loop until at least a vertex is removed
+  
+   /// Start with a maximal clique as lower bound
+   if ( density > 0.7 )
+      s = clique_find_single ( g, 2, 0, TRUE, opts);
+   else
+      s = clique_find_single ( g, 0, 0, TRUE, opts);
+   maximalize_clique(s,g);
+   if ( s != NULL && set_size(s) > LB ) {
+      LB = set_size(s);
+      set_copy(C,s);  /// C is the best maximal clique found
+   }
+   bool removed = true;
    int  n_r = 0;
+   while ( removed ) {
+      removed = false;
+      for ( int i = 0; i < n; ++i ) {
+         if ( graph_vertex_degree(g, i) < LB-1 ) { 
+            for ( int j = 0; j < n ; ++j )
+               if ( GRAPH_IS_EDGE(g,i,j) ) {
+                  GRAPH_DEL_EDGE(g,i,j);
+                  GRAPH_DEL_EDGE(h,i,j);
+                  n_r++;
+                  removed = true;
+               }
+         }
+      }
+   }
+
+   /// Loop until at least a vertex is removed
    while ( graph_edge_count(h) > 0 ) {
       bool flag = false;
       /// Find a maximal clique for every vertex, and store the largest
-      for ( int i = 0; i < n; ++i ) 
-         if ( graph_vertex_degree(h,i) > 0 ) {
-            if ( n > 1000 || density > 0.7 )
-               s = clique_find_single ( h, 2, 0, TRUE, opts);
-            else
-               s = clique_find_single ( h, 0, 0, TRUE, opts);
-            maximalize_clique(s,G);
-            if ( s != NULL ) {
-               if ( set_size(s) > LB ) {
-                  LB = set_size(s);
-                  set_copy(C,s);  /// C is the best maximal clique found
-                  flag = true;
-               } 
-               Cs[n_c++]=set_duplicate(s);
-               /// Rimuovi tutti gli archi contenuti nella clique
-               for ( int j = 0; j < n; ++j )
-                  if ( SET_CONTAINS_FAST(s,j) )
-                     for ( int l = j+1; l < n; ++l )
-                        if ( SET_CONTAINS_FAST(s,l) && GRAPH_IS_EDGE(h,j,l) )
-                           GRAPH_DEL_EDGE(h,j,l);
-            }
-            break;
-         }
+      if ( density > 0.7 )
+         s = clique_find_single ( h, 2, 0, TRUE, opts);
+      else
+         s = clique_find_single ( h, 0, 0, TRUE, opts);
+      maximalize_clique(s,g);
+      if ( s != NULL ) {
+         if ( set_size(s) > LB ) {
+            LB = set_size(s);
+            set_copy(C,s);  /// C is the best maximal clique found
+            flag = true;
+         } 
+         Cs[n_c++]=set_duplicate(s);
+         /// Rimuovi tutti gli archi contenuti nella clique
+         for ( int j = 0; j < n; ++j )
+            if ( SET_CONTAINS_FAST(s,j) )
+               for ( int l = j+1; l < n; ++l )
+                  if ( SET_CONTAINS_FAST(s,l) && GRAPH_IS_EDGE(h,j,l) )
+                     GRAPH_DEL_EDGE(h,j,l);
+      }
 
       /// Reduce the graph (if degree smaller than LB, then remove the vertex)
       if ( flag )
-         for ( int i = 0; i < n-1; ++i ) {
-            if ( graph_vertex_degree(g, i) >= 0 && graph_vertex_degree(g, i) < LB ) { 
-               for ( int j = i+1; j < n ; ++j )
+         for ( int i = 0; i < n; ++i ) {
+            if ( graph_vertex_degree(g, i) < LB-1 ) { 
+               for ( int j = 0; j < n ; ++j )
                   if ( GRAPH_IS_EDGE(g,i,j) ) {
                      GRAPH_DEL_EDGE(g,i,j);
                      if ( GRAPH_IS_EDGE(h,i,j) )
@@ -416,7 +441,6 @@ int main(int argc, char **argv)
             }
          }
    }
-   fprintf(stdout,"Preprocessing: edge removal %d cliques %d\n", n_r, n_c);
 
    /// Remove duplicate cliques
    int n_d = n_c;
@@ -433,7 +457,9 @@ int main(int argc, char **argv)
       }
    }
 
-   fprintf(stdout, "Edges %d - Useful maximal cliques %d\n", m, n_d);
+   fprintf(stdout,"Graph: n %d m %d density %.2f\n", n, m, density);
+   fprintf(stdout,"Algo: branch %d scale %.1f propagation %d\n", BRANCH, SCALE/10, PROP);
+   fprintf(stdout,"Preprocessing: LB %d edges_removed %d cliques %d\n", LB, n_r, n_d);
 
    /// Stats on cliques
    int mm = 0;
@@ -451,7 +477,7 @@ int main(int argc, char **argv)
 
    /// Call the CP model 
    fprintf(stdout, "Run CP model with LB %d - Preproc time %.3f\n", LB, t.stop()/1000);
-   vector<int> certificate = colorHeuristic ( G, &C, n_c, Cs, UB, timeout, memoryLimit, threads );
+   vector<int> certificate = colorHeuristic ( g, n_c, Cs, UB, timeout, memoryLimit, threads );
    
    for ( int i = 0; i < n-1; ++i ) 
       for ( int j = i+1; j < n ; ++j )
@@ -465,7 +491,7 @@ int main(int argc, char **argv)
       if ( graph_vertex_degree(g,i) < LB )
          certificate[i] = 0;
 
-   vector<int> sol = colorFinal ( G, certificate, &C, n_c, Cs, UB, timeout, memoryLimit, threads );
+   vector<int> sol = colorFinal ( G, certificate, n_c, Cs, UB, threads );
 
    for ( int i = 0; i < n-1; ++i ) 
       for ( int j = i+1; j < n ; ++j )
