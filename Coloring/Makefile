@@ -1,7 +1,7 @@
 # Stefano Gualandi, stefano.gualandi@gmail.com
 # last update, May, 2013
 
-OPTFLAG = -O2 -DNDEBUG -Wall -ggdb -fPIC -fpermissive
+OPTFLAG = -O2 -DNDEBUG -Wall -ggdb -fPIC -Wno-sign-compare -fpermissive
 LDFLAGS = -O2 -DNDEBUG -lm -lpthread -ggdb
 
 COMPILER    = g++ ${OPTFLAG}
@@ -30,6 +30,6 @@ GeCol: ${SRC}/GeCol.cc
 	${LINKER} -o ${BIN}/GeCol ${LIB}/GeCol.o ${GECODE_LIB} ${CLIQUER_LIB}
 
 ## DSATUR by M.Trick
-dsatur: ${SRC}/trick.c
-	gcc -c ${SRC}/trick.c -funroll-loops -o ${LIB}/dsatur.o -I${CLIQUER_INC}
+dsatur: ${SRC}/dsatur.c
+	gcc -c ${SRC}/dsatur.c -funroll-loops -o ${LIB}/dsatur.o -I${CLIQUER_INC}
 	gcc -o ${BIN}/dsatur ${LIB}/dsatur.o ${CLIQUER_LIB}
