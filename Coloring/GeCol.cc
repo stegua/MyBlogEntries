@@ -28,52 +28,44 @@ extern "C" {
 using namespace Gecode;
 using namespace Gecode::Int;
 
-int    BRANCH   = 0;
-double SCALE    = 17;
-int    PROP     = 1;
-set_t  C        = NULL;
+int    BRANCH   = 7;      /// Type of branching rule
+double SCALE    = 14;     /// Scale factor on the geometric restart policy
+int    PROP     = 1;      /// Type of propagation (Domain, Bound, only arcs)
+int    UB0      = -1;     /// To provide "manually" an initial upper bound
+int    NOGOOD   = 0;      /// Depth limit in the generation of nogood
+set_t  C        = NULL;   /// Maximal (best) clique found in preprocessing
 
 
 /// Cutoff object for the script
 class MyCutoff : public Search::Stop {
    private:
       Search::TimeStop*    ts; 
-      Search::MemoryStop*  ms; 
 
-      MyCutoff(int time, int memory)
-         : ts((time > 0)   ? new Search::TimeStop(time) : NULL),
-         ms((memory > 0) ? new Search::MemoryStop(memory) : NULL) {}
+      MyCutoff(int time)
+         : ts((time > 0) ? new Search::TimeStop(time) : NULL) {}
    public:
       virtual bool stop(const Search::Statistics& s, const Search::Options& o) {
          return
-            ((ts != NULL) && ts->stop(s,o)) ||
-            ((ms != NULL) && ms->stop(s,o));
+            ((ts != NULL) && ts->stop(s,o));
       }
       virtual bool stopTime(const Search::Statistics& s, const Search::Options& o) {
          return
             ((ts != NULL) && ts->stop(s,o));
       }
-      virtual bool stopMemory(const Search::Statistics& s, const Search::Options& o) {
-         return
-            ((ms != NULL) && ms->stop(s,o));
-      }
       static Search::Stop*
-         create(int time, int memory) {
-            if ((time == 0) && (memory == 0))
+         create(int time) {
+            if (time == 0)
                return NULL;
             else
-               return new MyCutoff(time,memory);
+               return new MyCutoff(time);
          }
       ~MyCutoff(void) {
-         delete ts; delete ms;
+         delete ts;
       }
 };
 
 
 static double trampoline(const Space& home, IntVar x, int i); 
-double mymerit(const Space& home, IntVar x, int i) { 
-   return x.afc(home) / static_cast<double>(x.size());
-}
 
 /// Main Script
 class GraphColoring : public Script {
@@ -167,7 +159,7 @@ class GraphColoring : public Script {
          for ( int i = 0; i < certificate.size(); ++i ) 
             certificate[i] = x[i].val();
       }
-      double merit(IntVar x, int i) { 
+      double merit(IntVar x, int i) const { 
          if ( SET_CONTAINS(C,i) )
             return std::numeric_limits<double>::max();
          else
@@ -187,7 +179,6 @@ colorHeuristic ( const graph_t*    g,
       const set_t*    cliques,
       int&            UB,
       double          time,
-      int             memory,
       int             n_threads
       )
 {
@@ -200,7 +191,6 @@ colorHeuristic ( const graph_t*    g,
    /// Aux variables
    double elapsed;
    double ss = SCALE/10;
-   int scriptMemory = 0;
    int tot_nodes = 0;
    int status = 1;
    /// Search loop
@@ -219,15 +209,15 @@ colorHeuristic ( const graph_t*    g,
       /// Search options
       Search::Cutoff* c = Search::Cutoff::geometric(1000,ss);
       Search::Options so;
-      so.stop = MyCutoff::create( elapsed, memory );
+      so.stop = MyCutoff::create( elapsed );
       so.threads = n_threads;
       so.clone   = false;
       so.cutoff  = c;
+      so.nogoods_limit = NOGOOD;
       RBS<DFS,GraphColoring> e(s, so);
 
       GraphColoring* ex = e.next();
       
-      scriptMemory = std::max<int>(scriptMemory, e.statistics().memory);
       tot_nodes += e.statistics().node;
 
       if ( e.stopped() ) {
@@ -238,10 +228,6 @@ colorHeuristic ( const graph_t*    g,
             fprintf(stdout," TIME LIMIT!\n");
             status = 0;
          }
-         if ( myc->stopMemory(e.statistics(),so) ) {
-            fprintf(stdout," MEMORY LIMIT!\n");
-            status = 2;
-         }
       }
 
       if ( ex == NULL ) {
@@ -250,7 +236,7 @@ colorHeuristic ( const graph_t*    g,
       }
       UB = std::min(UB,ex->getChi());
       ex->getColoring(certificate);
-      fprintf(stdout,"\t%.2f\t%d\t%d\t%ld\n", (t.stop()/1000), UB, scriptMemory, e.statistics().node);
+      fprintf(stdout,"\t%.2f\t%d\t%ld\n", (t.stop()/1000), UB, e.statistics().node);
 
       delete ex;
    } while ( time - t.stop() >= 0.001 );
@@ -304,7 +290,7 @@ colorFinal ( const graph_t*    g,
 int main(int argc, char **argv)
 {
    if ( argc == 1 ) {
-      fprintf(stdout, "\nusage:  $ ./GeCol <filename> <branch> <restart>\n\n");
+      fprintf(stdout, "\nusage:  $ ./GeCol <filename> <branch> <restart> <ub>\n\n");
       exit(EXIT_SUCCESS);
    }
 
@@ -316,11 +302,16 @@ int main(int argc, char **argv)
    if ( argc >= 4 )
       SCALE = atoi(argv[3]);
 
-   if ( argc == 5 )
+   if ( argc >= 5 )
       PROP = atoi(argv[4]);
 
+   if ( argc >= 6 )
+      UB0 = atoi(argv[5]);
+
+   if ( argc >= 7 )
+      NOGOOD = atoi(argv[6]);
+
    int  timeout = 600*1000;  /// in seconds
-   int  memoryLimit = numeric_limits<int>::max();
    int  threads = 1;
    
    clique_options* opts;
@@ -350,6 +341,8 @@ int main(int argc, char **argv)
    int m = graph_edge_count(g0);
    int n_c = 0;   /// Number of maximal cliques found
    int UB = n;
+   if ( UB0 != -1 )
+      UB = UB0;
    int LB = 0;
    set_t s = set_new(n);
    float density = (float)m/(n*(n-1)/2);
@@ -377,7 +370,7 @@ int main(int argc, char **argv)
    t.start();
   
    /// Start with a maximal clique as lower bound
-   if ( density > 0.7 )
+   if ( density > 0.0 )
       s = clique_find_single ( g, 2, 0, TRUE, opts);
    else
       s = clique_find_single ( g, 0, 0, TRUE, opts);
@@ -407,7 +400,8 @@ int main(int argc, char **argv)
    while ( graph_edge_count(h) > 0 ) {
       bool flag = false;
       /// Find a maximal clique for every vertex, and store the largest
-      if ( density > 0.7 )
+      float density = (float)graph_edge_count(h)/(n*(n-1)/2);
+      if ( density > 0.0 )
          s = clique_find_single ( h, 2, 0, TRUE, opts);
       else
          s = clique_find_single ( h, 0, 0, TRUE, opts);
@@ -475,9 +469,19 @@ int main(int argc, char **argv)
          }
       } 
 
+   /// Dump instance
+  /* fprintf(stdout,"%d %d %d\n", n, n_c, UB);
+   for ( int i = 0; i < n_c; ++i ) {
+      fprintf(stdout, "%d ", set_size(Cs[i]));
+      for ( int j = 0; j < n; ++j )
+         if ( SET_CONTAINS(Cs[i],j) )
+            fprintf(stdout, "%d ", j+1);
+      fprintf(stdout, "\n");
+   }*/
+   
    /// Call the CP model 
    fprintf(stdout, "Run CP model with LB %d - Preproc time %.3f\n", LB, t.stop()/1000);
-   vector<int> certificate = colorHeuristic ( g, n_c, Cs, UB, timeout, memoryLimit, threads );
+   vector<int> certificate = colorHeuristic ( g, n_c, Cs, UB, timeout, threads );
    
    for ( int i = 0; i < n-1; ++i ) 
       for ( int j = i+1; j < n ; ++j )
