@@ -25,4 +25,4 @@ def NMAE(X, Y):
 
 def Evaluate(X, Y):
     """ Compute MAE, RMSE, NMAE """
-    return map(lambda x: round(x, 4), [MAE(X,Y), NMAE(X,Y), RMSE(X,Y)])
+    return list(map(lambda x: round(x, 4), [MAE(X,Y), NMAE(X,Y), RMSE(X,Y)]))

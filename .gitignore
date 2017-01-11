@@ -242,3 +242,4 @@ ModelManifest.xml
 .fake/
 /RecommenderSystem/evaluation.pyc
 /RecommenderSystem/movieLensParser.pyc
+/RecommenderSystem/__pycache__

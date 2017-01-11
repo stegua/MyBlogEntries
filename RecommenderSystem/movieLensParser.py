@@ -79,10 +79,10 @@ import argparse
     
 parser = argparse.ArgumentParser()
 parser.add_argument('--version', action='version', version='0.0.1')
-parser.add_argument('-u', '--users', help='users data filename', default='.\data\ml-100k\u.user')
-parser.add_argument('-i', '--items', help='items data filename', default='.\data\ml-100k\u.item')
-parser.add_argument('-t', '--trainset', help='training set filename', default='.\data\ml-100k\u1.base')
-parser.add_argument('-v', '--validateset', help='validation set filename', default='.\data\ml-100k\u1.test')
+parser.add_argument('-u', '--users', help='users data filename', default='./data/ml-100k/u.user')
+parser.add_argument('-i', '--items', help='items data filename', default='./data/ml-100k/u.item')
+parser.add_argument('-t', '--trainset', help='training set filename', default='./data/ml-100k/u1.base')
+parser.add_argument('-v', '--validateset', help='validation set filename', default='./data/ml-100k/u1.test')
 
 #------------------------------------------
 #              MAIN ENTRY POINT
@@ -90,12 +90,12 @@ parser.add_argument('-v', '--validateset', help='validation set filename', defau
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    print "Filenames: ", args.users, args.items, args.trainset
+    print("Filenames: ", args.users, args.items, args.trainset)
     if args.users and args.items and args.trainset:
         Users = ParseUsers(args.users)
         Items = ParseItems(args.items)
         TrainingSet = ParseRatings(args.trainset)
 
-        print "Users:", len(Users)
-        print "Items:", len(Items)
-        print "Training Set:", len(TrainingSet)
+        print("Users:", len(Users))
+        print("Items:", len(Items))
+        print("Training Set:", len(TrainingSet))

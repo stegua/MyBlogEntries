@@ -72,7 +72,7 @@ def SlopeOne(Users, Items, Ratings):
                 a, b = SX[ri.idItem][rj.idItem]
                 SX[ri.idItem][rj.idItem] = (a+(ri.rating - rj.rating), b+1)
 
-    print "Computed SX:", time.time() - start
+    print("Computed SX:", time.time() - start)
     start = time.time()
 
     # Compute the average matrix  
@@ -84,7 +84,7 @@ def SlopeOne(Users, Items, Ratings):
                 if i not in Dev:
                     Dev[i] = {}
                 Dev[i][j] = float(a)/b
-    print "Computed M:", time.time() - start
+    print("Computed M:", time.time() - start)
     start = time.time()
 
     # Compute the relevant items for each pair (user, item) not yet rated
@@ -95,7 +95,7 @@ def SlopeOne(Users, Items, Ratings):
     R = {}
     for u in Users:
         R[u.id] = {}
-        rated_items = map(lambda z: z.idItem, C[u.id])        
+        rated_items = list(map(lambda z: z.idItem, C[u.id]))
         
         for j in Dev:
             R[u.id][j] = []
@@ -103,7 +103,7 @@ def SlopeOne(Users, Items, Ratings):
                 if i != j and i in Dev[j]:
                     R[u.id][j].append(i)
 
-    print "Computed R:", time.time() - start
+    print("Computed R:", time.time() - start)
     start = time.time()
 
     # Compute the bias on the average for slope one
@@ -111,7 +111,7 @@ def SlopeOne(Users, Items, Ratings):
     for u in map(lambda z: z.id, Users):
         if C[u]:
             rated_items = set(map(lambda z: z.idItem, C[u]))
-            u_bar = np.mean(map(lambda z: float(z.rating), C[u]))
+            u_bar = np.mean(list(map(lambda z: float(z.rating), C[u])))
             PS1[u] = {}
             for j in Items:
                 PS1[u][j.id] = u_bar
@@ -121,7 +121,7 @@ def SlopeOne(Users, Items, Ratings):
                     for i in R[u][j.id]:
                         PS1[u][j.id] += 1.0/card*Dev[j.id][i]
 
-    print "Computed PS1:", time.time() - start
+    print("Computed PS1:", time.time() - start)
 
     return PS1
 
@@ -133,24 +133,24 @@ def SlopeOne(Users, Items, Ratings):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    print "Filenames: ", args.users, args.items, args.trainset
+    print("Filenames: ", args.users, args.items, args.trainset)
     if args.users and args.items and args.trainset:
         Users = ParseUsers(args.users)
         Items = ParseItems(args.items)
         TrainingSet = ParseRatings(args.trainset)
 
-        print "Users:", len(Users)
-        print "Items:", len(Items)
-        print "Training Set:", len(TrainingSet)
+        print("Users:", len(Users))
+        print("Items:", len(Items))
+        print("Training Set:", len(TrainingSet))
     else:
-        print "Please, fill in all the input parameters"
+        print("Please, fill in all the input parameters")
 
     start = time.time()
     
     P1 = SlopeOne(Users, Items, TrainingSet)
     
     end = time.time()
-    print "Elapsed time: ", end - start
+    print("Elapsed time: ", end - start)
 
     Y = []
     X1 = []
@@ -160,15 +160,15 @@ if __name__ == "__main__":
             X1.append(round(P1[r.idUser][r.idItem]))
             Y.append(int(r.rating))
         else:
-            print r
-            print P1
+            print(r)
+            print(P1)
             sys.exit(0)
     
 
-    print "SlopeOne: ", Evaluate(X1, Y)
+    print("SlopeOne: ", Evaluate(X1, Y))
 
     end = time.time()
-    print "Elapsed time: ", end - start
+    print("Elapsed time: ", end - start)
 
     sys.exit(0)
 
@@ -193,6 +193,6 @@ if __name__ == "__main__":
             X2.append(P2[r.idUser])
             X3.append(P3[r.idUser][r.idItem])
             Y.append(int(r.rating))
-        print "PER USER AVERAGE - rating as real: ", Evaluate(X1, Y)
-        print "PER USER AVERAGE - rating as int:  ", Evaluate(X2, Y)
-        print "BIAS FROM MEAN   - rating as int:  ", Evaluate(X3, Y)
+        print("PER USER AVERAGE - rating as real: ", Evaluate(X1, Y))
+        print("PER USER AVERAGE - rating as int:  ", Evaluate(X2, Y))
+        print("BIAS FROM MEAN   - rating as int:  ", Evaluate(X3, Y))
