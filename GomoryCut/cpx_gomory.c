@@ -1,14 +1,41 @@
-/* Spaghetti Optimization - Gomory Cuts using CPLEX callable library */
-/* Stefano Gualandi, stefano.gualandi [at] gmail.com
- *
- *
- * The example file "example.mat" encode the example 8.10 of the 
+/********************************************************************************
+
+Spaghetti Optimization - Gomory Cuts using CPLEX callable library
+
+Stefano Gualandi, stefano.gualandi [at] gmail.com
+
+ MIT License
+
+ Copyright (c) 2017 Stefano Gualandi
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+
+ *******************************************************************************/
+
+/*
+ * The example file "example.mat" encode the example 8.10 of the
  * Wolsey's book "Intger Programming", Wiley, 1998.
 
      maximize    4 x_1 -  5 x_2
      subject to  7 x_1 - 2 x_2 + x_3             = 14
                            x_2       + x_4       = 3
-                 2 x_1 - 2 x_2             + x_5 = 3	   
+                 2 x_1 - 2 x_2             + x_5 = 3
      x_i >= 0 and integer for i in {1,2}  (x_3, x_4, and x_5 are slacks)
 */
 
@@ -26,13 +53,12 @@
 
 /// From IBM-ILOG examples
 static void
-free_and_null (char **ptr)
-{
+free_and_null (char **ptr) {
    if ( *ptr != NULL ) {
       free (*ptr);
       *ptr = NULL;
    }
-} /* END free_and_null */  
+} /* END free_and_null */
 
 /// My Rows structure to store cutting planes
 /// First row is the cost vector (i.e. rhs=0)
@@ -55,23 +81,25 @@ int read_matrix(const char* filename, MyRow* rows) {
    int i = 0, j = 0;
    int n = 0, m = 0;
    FILE *in = NULL;
+   errno_t err;
 
-   in = fopen(filename, "r");
-   if ( in == NULL ) 
-      return -1;
+   if ((err = fopen_s(&in, filename, "r")) != 0) {
+      fprintf(stdout, "Impossible to open file: %s\n", filename);
+      exit(EXIT_FAILURE);
+   }
 
    /// Read the number of variables and constraints
    /// of the first problem
-   fscanf (in, "%d %d", &n, &m);
+   fscanf_s(in, "%d %d", &n, &m);
    /// Add the cost vector as first row
    rows[0].n = n;
    rows[0].ind = (int*)    malloc (n * sizeof(int));
    rows[0].lhs = (double*) malloc (n * sizeof(double));
    for ( j = 0; j < n; ++j ) {
       rows[0].ind[j] = j;
-      fscanf(in, "%lf", &rows[0].lhs[j] );
+      fscanf_s(in, "%lf", &rows[0].lhs[j] );
    }
-   fscanf(in, "%lf", &rows[0].rhs );
+   fscanf_s(in, "%lf", &rows[0].rhs );
    /// Read the matrix row A_i and rhs b_i
    for ( i = 1; i < m; ++i ) {
       rows[i].n   = n;
@@ -79,9 +107,9 @@ int read_matrix(const char* filename, MyRow* rows) {
       rows[i].lhs = (double*) malloc (n * sizeof(double));
       for ( j = 0; j < n; ++j ) {
          rows[i].ind[j] = j;
-         fscanf(in, "%lf", &rows[i].lhs[j] );
+         fscanf_s(in, "%lf", &rows[i].lhs[j] );
       }
-      fscanf(in, "%lf", &rows[i].rhs );
+      fscanf_s(in, "%lf", &rows[i].rhs );
    }
    fclose(in);
 
@@ -96,21 +124,21 @@ void print_solution(int cur_numcols, const double* x, const int* cstat) {
       printf ( "x%d = %.2lf", j+1, x[j]);
       if ( cstat != NULL ) {
          switch (cstat[j]) {
-            case CPX_AT_LOWER:
-               basismsg = "Nonbasic at lower bound";
-               break;
-            case CPX_BASIC:
-               basismsg = "Basic";
-               break;
-            case CPX_AT_UPPER:
-               basismsg = "Nonbasic at upper bound";
-               break;
-            case CPX_FREE_SUPER:
-               basismsg = "Superbasic, or free variable at zero";
-               break;
-            default:
-               basismsg = "Bad basis status";
-               break;
+         case CPX_AT_LOWER:
+            basismsg = "Nonbasic at lower bound";
+            break;
+         case CPX_BASIC:
+            basismsg = "Basic";
+            break;
+         case CPX_AT_UPPER:
+            basismsg = "Nonbasic at upper bound";
+            break;
+         case CPX_FREE_SUPER:
+            basismsg = "Superbasic, or free variable at zero";
+            break;
+         default:
+            basismsg = "Bad basis status";
+            break;
          }
          printf ("  %s",basismsg);
       }
@@ -141,8 +169,7 @@ void print_max_lp(int m, const MyRow* rows) {
    printf("\n");
 }
 
-int cg_solver(int m, MyRow* rows)
-{
+int cg_solver(int m, MyRow* rows) {
    CPXENVptr     env = NULL;
    CPXLPptr      model = NULL;
    int           status = 0;
@@ -156,19 +183,19 @@ int cg_solver(int m, MyRow* rows)
    double   *x;
    double   *z;
    int      *cstat;
- 
-   int      n0 = rows[0].n;      
+
+   int      n0 = rows[0].n;
    int      n1 = rows[0].n+m-1;  /// One slack variable for constraint
    int      h = (m-1)*n0 + m-1;  /// Number of nonzeros
 
-   double   obj[n1];
+   double*  obj = (double*)malloc(n1*sizeof(double));
 
-   double   rhs[m-1];    /// The first row is for the cost vector
-   char     sense[m-1];
+   double*   rhs = (double*)malloc((m-1) * sizeof(double));    /// The first row is for the cost vector
+   char*    sense = (char*)malloc((m-1) * sizeof(char));
 
-   int      jnd[h];
-   int      ind[h];
-   double   val[h];
+   int*     jnd = (int*)malloc(h * sizeof(int));
+   int*     ind = (int*)malloc(h * sizeof(int));
+   double*  val = (double*)malloc(h * sizeof(double));
 
    int      idx = 0;
 
@@ -191,26 +218,26 @@ int cg_solver(int m, MyRow* rows)
 
    /// Disable presolve
    POST_CMD( CPXsetintparam (env, CPX_PARAM_PREIND, CPX_OFF) );
-   
+
    /// Create problem
    model = CPXcreateprob (env, &error, "gomory");
    if (error) goto QUIT;
 
    /// Minimization problem
    POST_CMD( CPXchgobjsen (env, model, CPX_MIN) );
-   
+
    /// Add rows (remember first row is cost vector)
    for ( i = 0; i < m-1; ++i ) {
       sense[i]='E';
       rhs[i] = rows[i+1].rhs;
    }
    POST_CMD( CPXnewrows(env, model, m-1, rhs, sense, NULL, NULL) );
-   
-   /// Add problem variables 
-   for ( j = 0; j < n0; ++j ) 
+
+   /// Add problem variables
+   for ( j = 0; j < n0; ++j )
       obj[j] = rows[0].lhs[j];
-   /// Add slack variables 
-   for ( j = n0; j < n1; ++j ) 
+   /// Add slack variables
+   for ( j = n0; j < n1; ++j )
       obj[j] = 0;
    POST_CMD( CPXnewcols(env, model, n1, obj, NULL, NULL, NULL, NULL) );
 
@@ -249,7 +276,7 @@ int cg_solver(int m, MyRow* rows)
       exit(0);
    }
 
-   /// Write the output to the screen 
+   /// Write the output to the screen
    printf ("\nSolution status = %d\t\t", solstat);
    printf ("Solution value  = %f\n\n", objval);
 
@@ -292,21 +319,21 @@ int cg_solver(int m, MyRow* rows)
       }
       printf("= %.1f\n", b_bar[i]);
       /// Count the number of cuts to be generated
-      if ( floor(b_bar[i]) != b_bar[i] ) 
+      if ( floor(b_bar[i]) != b_bar[i] )
          n_cuts++;
    }
 
    /// Allocate memory for the new data structure
-   gc_sense = (char*)   malloc ( n_cuts * sizeof(char) ); 
-   gc_rhs   = (double*) malloc ( n_cuts * sizeof(double) ); 
-   rmatbeg  = (int*)    malloc ( n_cuts * sizeof(int) ); 
-   rmatind  = (int*)    malloc (    idx * sizeof(int) ); 
-   rmatval  = (double*) malloc (    idx * sizeof(double) ); 
+   gc_sense = (char*)   malloc ( n_cuts * sizeof(char) );
+   gc_rhs   = (double*) malloc ( n_cuts * sizeof(double) );
+   rmatbeg  = (int*)    malloc ( n_cuts * sizeof(int) );
+   rmatind  = (int*)    malloc (    idx * sizeof(int) );
+   rmatval  = (double*) malloc (    idx * sizeof(double) );
 
    printf("\nGenerate Gomory cuts:\n");
    idx = 0;
    cut = 0;  /// Index of cut to be added
-   for ( i = 0; i < m-1; ++i ) 
+   for ( i = 0; i < m-1; ++i )
       if ( floor(b_bar[i]) != b_bar[i] ) {
          printf("Row %d gives cut ->   ", i+1);
          POST_CMD( CPXbinvarow(env, model, i, z) );
@@ -330,10 +357,10 @@ int cg_solver(int m, MyRow* rows)
       }
 
    /// Add the new cuts
-   POST_CMD( CPXaddrows (env, model, 0, 
-            n_cuts, idx, gc_rhs, gc_sense, 
-            rmatbeg, rmatind, rmatval, 
-            NULL, NULL) );
+   POST_CMD( CPXaddrows (env, model, 0,
+                         n_cuts, idx, gc_rhs, gc_sense,
+                         rmatbeg, rmatind, rmatval,
+                         NULL, NULL) );
 
    /// Solve the new LP
    POST_CMD( CPXlpopt(env, model) );
@@ -348,7 +375,7 @@ int cg_solver(int m, MyRow* rows)
       printf("The solver did not find an optimal solution\nSolver status code: %d\n",solstat);
       exit(0);
    }
-   /// Write the output to the screen 
+   /// Write the output to the screen
    printf ("\nSolution status = %d\n", solstat);
    printf ("Solution value = %f\n\n", objval);
 
@@ -367,6 +394,13 @@ QUIT:
    free_and_null ((char **) &x);
    free_and_null ((char **) &z);
    free_and_null ((char **) &cstat);
+
+   free(rhs);
+   free(sense);
+
+   free(jnd);
+   free(ind);
+   free(val);
 
    if ( error ) {
       char  errmsg[CPXMESSAGEBUFSIZE];
@@ -401,8 +435,14 @@ int main(int argc, char* argv[]) {
    MyRow rows[MAX_N_ROWS];
    int i = 0;
 
-   if ( argc != 2 )
-      exit(-1);
+   if (argc != 2) {
+#ifdef _WIN32
+      fprintf(stdout, "\nUsage:\n GomoryCut.exe example.mat\n\n");
+#else
+      fprintf(stdout, "\nUsage:\n cg_solver example.mat\n\n");
+#endif
+      exit(EXIT_FAILURE);
+   }
 
    int m = read_matrix(argv[1], rows);
    print_max_lp(m, rows);
