@@ -48,7 +48,7 @@ Stefano Gualandi, stefano.gualandi [at] gmail.com
 
 #define TRUE   0
 #define FALSE  1
-#define MAX_N_ROWS 10
+#define MAX_N_ROWS 20
 #define POST_CMD(x) if (x) goto QUIT;
 
 /// From IBM-ILOG examples
