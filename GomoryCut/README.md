@@ -1,6 +1,8 @@
 ## Introduction
 This directory contains a simple program (`cpx_gomory.c`) that takes as input a **small** linear integr program, solves the Linear Programming relaxation using CPLEX, and generates Gomory cuts from the optimal tableu computed by CPLEX.
 
+For a short blog post about this example, go to my [Spaghetti Optimization blog](https://stegua.github.io).
+
 Given a problem with _n_ variables and _m_ constraints, the problem is:
 
 	min { cx | Ax <= b, x >= 0, x integer }
@@ -63,3 +65,7 @@ The output should be as follows:
 	
 ## Requirements
 You need to have [CPLEX](http://www-01.ibm.com/software/integration/optimization/cplex-optimizer/) installed on your computer.
+
+If you work under Windows, please check the msvc directory, that contains a MS Visual Studio 2017 solution file.
+
+Last version of CPLEX checked: CPLEX 12.7.1.
